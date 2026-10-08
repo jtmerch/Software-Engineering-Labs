@@ -1,0 +1,127 @@
+@page "/"
+@using PaymentBlazorClient.DTOs
+@inject PaymentBlazorClient.Services.PaymentGatewayClient GatewayClient
+
+<!-- Payment form card -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Authorize Payment</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-sm-6">
+                <label class="form-label">Merchant ID</label>
+                <input class="form-control" @bind="request.MerchantId" />
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label">Amount</label>
+                <input class="form-control" type="number" step="0.01" @bind="request.Amount" />
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label">Currency</label>
+                <input class="form-control" @bind="request.Currency" />
+            </div>
+            <div class="col-sm-12">
+                <label class="form-label">Card Number</label>
+                <input class="form-control" @bind="request.CardNumber" />
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label">Exp. Month</label>
+                <input class="form-control" type="number" @bind="request.ExpirationMonth" />
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label">Exp. Year</label>
+                <input class="form-control" type="number" @bind="request.ExpirationYear" />
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label">CVV</label>
+                <input class="form-control" @bind="request.CVV" />
+            </div>
+            <div class="col-sm-12">
+                <label class="form-label">Customer Name</label>
+                <input class="form-control" @bind="request.CustomerName" />
+            </div>
+        </div>
+
+        <!-- Button shows a spinner while the request is in flight -->
+        <button class="btn btn-primary mt-4 w-100" @onclick="Authorize" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <span>Processing...</span>
+            }
+            else
+            {
+                <span>Authorize</span>
+            }
+        </button>
+    </div>
+</div>
+
+<!-- Only show the result section after we get a response back -->
+@if (response != null)
+{
+    <!-- Green banner for approved, red for declined -->
+    <div class="alert @(response.Approved ? "alert-success" : "alert-danger") d-flex align-items-center" role="alert">
+        <strong class="me-2">@(response.Approved ? "Approved" : "Declined")</strong>
+        @response.ResponseMessage
+    </div>
+
+    <!-- Detail card showing everything we got back from the gateway -->
+    <div class="card shadow-sm">
+        <div class="card-header">Authorization Details</div>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Transaction ID</span>
+                <span class="fw-semibold font-monospace">@response.TransactionId</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Auth Code</span>
+                <span class="fw-semibold font-monospace">@(string.IsNullOrEmpty(response.AuthCode) ? "—" : response.AuthCode)</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Processor Response</span>
+                <span class="fw-semibold">@response.ProcessorResponseCode</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Merchant</span>
+                <span>@response.MerchantName</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Processor</span>
+                <span>@response.ProcessorName</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Fraud Score</span>
+                <!-- Color-coded badge: green under 50, yellow 50–79, red 80+ -->
+                <span class="badge @(response.FraudScore >= 80 ? "bg-danger" : response.FraudScore >= 50 ? "bg-warning text-dark" : "bg-success")">
+                    @response.FraudScore
+                </span>
+            </li>
+        </ul>
+    </div>
+}
+
+@code {
+    // Holds the current values from the form
+    private CardPaymentRequest request = new CardPaymentRequest();
+
+    // Holds the response once we get one back — null until the first submission
+    private PaymentAuthorizationResponse? response;
+
+    // Controls whether the button is disabled and the spinner is showing
+    private bool isLoading;
+
+    private async Task Authorize()
+    {
+        isLoading = true;
+
+        // Generate a new idempotency key each time the button is clicked so duplicate submissions are safe
+        request.IdempotencyKey = Guid.NewGuid().ToString();
+
+        // Call the gateway and wait for the result
+        response = await GatewayClient.AuthorizeAsync(request);
+
+        isLoading = false;
+    }
+}
